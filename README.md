@@ -10,7 +10,7 @@ author: felix specker
 
 ## Pictures of a bunch of threatened species:
 Kreukröte: 
-![alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 1"
+![alt text](https://github.com/speckerf/sta426_fspeck/kreuzkröte.jpg "oaihdgadnv")
 Bartgeier: 
-![alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 1"
+![alt text](https://github.com/speckerf/sta426_fspeck/bartgeier.jpg "öoaidfhgiuab")
 
