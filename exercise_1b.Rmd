@@ -1,0 +1,28 @@
+---
+title: "Exercise 1b"
+output: html_document
+---
+
+_Create an HTML document that samples 100 values from a log-normal
+distribution (say, mu=1, sigma=.25); create a histogram of the distribution and
+the distribution on the log scale; report the mean and variance of the sample in
+line in the text. In general, do not just dump the R code and plots in the HTML
+document; break your exercises into sections with headings, add some text
+and make it readable._
+
+
+#### Draw 100 values from a log-normal distribution
+```{r log-normal}
+x <- rlnorm(100, meanlog = 1, sdlog = 0.25)
+```
+
+#### Histogram of the distribution
+
+```{r}
+hist(x)
+hist(log(x))
+```
+
+#### Mean and Variance of the distribution
+The mean of our sample is `r round(mean(x), 3)`, while the variance is `r round(var(x), 3)`.
+
