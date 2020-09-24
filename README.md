@@ -9,8 +9,11 @@ author: felix specker
 [Link to my Degree's Website](https://cbb.ethz.ch/)
 
 ## Pictures of a bunch of threatened species:
-Kreukröte: 
-![alt text](https://github.com/speckerf/sta426_fspeck/kreuzkröte.jpg "oaihdgadnv")
-Bartgeier: 
-![alt text](https://github.com/speckerf/sta426_fspeck/bartgeier.jpg "öoaidfhgiuab")
+#### Kreukröte: 
+![](kreuzkröte.jpg "oaihdgadnv")
+
+#### Bartgeier: 
+![alt text](bartgeier.jpg "öoaidfhgiuab")
+
+
 
