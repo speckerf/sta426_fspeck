@@ -1,0 +1,345 @@
+---
+title: "Ex_5_sta426"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library("limma")
+library("ggplot2")
+nGenes <- 10000                   # number of "features"
+nSamples <- 6                     # number of samples (split equal in 2 groups)
+pDiff <- .1                       # percent of genes "differential 
+grp <- rep(0:1,each=nSamples/2)   # dummy variable for exp. group
+trueFC <- 2                       # log-fold-change of truly DE
+
+d0 <- 1
+s0 <- 0.8
+sd <- s0*sqrt(d0/rchisq(nGenes,df=d0))  # dist'n of s.d.
+
+```
+
+Note: there are some details regarding the scaled inverse chi-square distribution that you may want to explore. For example, see the wiki description.
+
+Next, we can generate a table of (null) data (i.e., no differential features):
+
+
+```{r}
+y <- matrix(rnorm(nGenes*nSamples,sd=sd),
+            nr=nGenes,nc=nSamples)
+```
+
+
+
+And, we can add in “differential expression”, randomly chosen to be in the positive or negative direction, to a set of indices chosen:
+
+
+```{r}
+indD <- 1:floor(pDiff*nGenes)
+diff <- sample(c(-1,1),max(indD),replace=TRUE)*trueFC
+y[indD,grp==1] <- y[indD,grp==1] + diff
+```
+
+_Question 1. First, do an exploratory analysis of the true and observed variances. For the observed variances, compute the residual variance for each row of y (i.e., pooled variance of the two simulated samples, not the row-wise variance; see the denominator of the classical two-sample t-statistic) and look at the distribution of them, of the true variances (from the simulated sd) and a scatter plot of true versus observed. Sometimes viewing variances on the log scale is preferred._
+
+
+```{r}
+## pooled variance of the two simulated samples: observed variance
+y_sp <- (2*apply(y[,grp==0],1,var)+2*apply(y[,grp==1],1,var))/(4)
+hist(log(y_sp))
+
+## distribution of the true variances sd
+hist(log(sd^2))
+
+## scatter true versus observed
+plot(log(sd^2), log(y_sp))
+points(log(sd^2)[1:1000], log(y_sp)[1:1000], col = "blue")
+abline(a=0,b=1, col =  "red")
+```
+
+_Question 2. Produce an additional visualization to show that you understand the differential expression in the simulation._
+
+```{r}
+y_mean <- apply(y/sqrt(y_sp),MARGIN = 1, mean)
+
+plot(y_mean, col = c(rep("blue", 1000), rep("black", 9000)),
+     pch = 20, lwd = 0.5, cex = 0.5,
+     ylab = "mean(y/sqrt(residual variance))", xlab = "gene", main = "Average expression divided by the residual standard deviation")
+legend("bottomright", legend = c("differential expression", "normal expression"), pch = 1, col = c("blue", "black"))
+
+
+#plot(y[,], y[4:6,])
+
+mean_0 <- apply(y[,1:3]/y_sp, 1, mean)
+mean_1 <- apply(y[,4:6]/y_sp, 1, mean)
+
+plot(mean_0, mean_1, col = c(rep("blue", 1000), rep("black", 9000)), pch = 20, lwd = 0.5, cex = 0.5, ylim = c(-50,50), xlim = c(-50,50))#, alpha=0.3)
+
+```
+
+```{r}
+library(ggplot2)
+mean_0 <- apply(y[,1:3]/sqrt(y_sp), 1, mean)
+mean_1 <- apply(y[,4:6]/sqrt(y_sp), 1, mean)
+dat <- data.frame(group_0 = mean_0, group_1 = mean_1, diff_exp = as.factor(rep(c(1,0), c(1000,9000))))
+ggplot(data = dat, aes(x = group_0, y = group_1, col = diff_exp)) + 
+  geom_point(alpha = 0.5, cex = 0.6) + 
+  ylim(-10,10) + 
+  xlim(-10,10) + 
+  xlab("Mean for group 0") + 
+  ylab("Mean for group 1") + 
+  labs(title = "Average expression value for every group divided by pooled variance")
+
+
+```
+
+
+
+We can clearly see the differential expression of the first 1000 genes, when the average expression value for every gene is divided by $\tilde s_g$, the residual standard deviation (== sqrt(pooled variance)). The 1000 differentially expressed genes have a higher variability of the mean expression values in group 1, compared to group 0.
+
+
+
+
+```{r}
+(design <- model.matrix(~grp))
+```
+
+_Question 3. In terms of the model that is fit for each feature, what is the interpretation of the two columns of this design matrix?_
+
+For every gene limma fits a linear model consisting of an intercept, which is the mean expression value of grp == 0. Further, the mean difference in expression for grp == 1 is fitted for every gene. 
+
+```{r}
+fit <- lmFit(y,design)
+fit <- eBayes(fit)
+
+names(fit)
+```
+
+```{r}
+cols <- rep("non-differential",nrow(y))
+cols[indD] <- "differential"
+
+qplot(y=fit$t[,2]) + geom_point(aes(colour=cols), main="Limma moderated t statistics")
+```
+
+
+
+_Question 4. For each row of y, calculate also the classical 2-sample t-test. See ?t.test for more details about the built-in R function to do this calculation and convince yourself which arguments to use to match the classical t-test described in class. Add a visualization similar to the above plot for the classical t-statistic and the log-fold-change (mean difference). Which statistic best separates the truly differential from non-differential?_
+
+```{r}
+# my_t_fun <- function(y){
+#   t.test(y[,1:3], y[,4:6], alternative = "two.sided", var.equal = FALSE)}
+# apply(y, 1, my_t_fun(y))
+
+t_values <- rep(NA, 10000)
+mean_diff <- rep(NA, 10000)
+
+
+for(i in 1:nrow(y)){
+  data_a <- c(y[i, 1:3])
+  data_b <- c(y[i, 4:6])
+  t_temp <- t.test(data_a, data_b, var.equal = T, alternative = "two.sided")
+  t_values[i] <- t_temp$statistic
+  mean_diff[i] <- t_temp$estimate[[2]] - t_temp$estimate[[1]]
+}
+
+plot(t_values, col = c(rep("blue", 1000), rep("black", 9000)),
+     pch = 20, lwd = 0.5, cex = 0.5, main="classical two sample t-test")
+legend("bottomright", legend = c("differential expression", "normal expression"), pch = 20, col = c("blue", "black"))
+
+plot(mean_diff, col = c(rep("blue", 1000), rep("black", 9000)),
+     pch = 20, lwd = 0.5, cex = 0.5, main = "mean difference between groups")
+legend("topright", legend = c("differential expression", "normal expression"), pch = 20, col = c("blue", "black"))
+
+```
+
+It is hard to tell whether the classical two sample t-test or the limma t-tests better separates the truly differential from the non-differential. However, we clearly see that the mean difference between the groups is not able to correctly separate the two groups. 
+
+
+_Question 5. Pick a reasonable metric to compare the methods, such as an ROC curve, false discovery plot, power versus achieved FDR. Using this metric/curve, formally compare the classical t-test, the moderated t-test and the log-fold-change or mean difference (fit$coef). Two packages that are useful for these kind of plots include: https://rocr.bioinf.mpi-sb.mpg.de/ or https://bioconductor.org/packages/release/bioc/html/iCOBRA.html._
+
+
+```{r}
+library(AUC)
+p_values <- rep(NA, 10000)
+for(i in 1:nrow(y)){
+  data_a <- c(y[i, 1:3])
+  data_b <- c(y[i, 4:6])
+  t_temp <- t.test(data_a, data_b, var.equal = T, alternative = "two.sided")
+  p_values[i] <- t_temp$p.value
+}
+p_moderated <- fit$p.value[,2]
+
+
+diff_exp <- dat$diff_exp
+
+## check whether p-value is below 0.05 for limma and t_test
+predictions_t_test <- as.integer(p_values<=0.05)
+predictions_moderated <- as.integer(p_moderated<=0.05)
+predictions_coef <- as.integer((-0.1>=fit$coefficients[,2]) | (fit$coefficients[,2]>=0.1)) # arbitrary tolerance of 0.1
+
+### use ROC which is the the true positive rate ~ false positive rate
+## ROC for t_test
+pred_t_test <- roc(predictions_t_test, diff_exp)
+plot(pred_t_test, main = "ROC for two sample t-test")
+  
+
+## ROC for t_moderated (from limma)
+pred_moderated <- roc(predictions_moderated, diff_exp)
+plot(pred_moderated, main = "ROC for moderated t-test using limma")
+
+
+auc_t_test <- auc(pred_t_test)
+auc_moderated <- auc(pred_moderated)
+```
+
+
+The area under the curve is `r round(auc_t_test, 3)` for the two sample t-test and `r round(auc_moderated, 3)` for the moderated t-test (limma). We therefore see that the moderated t-test implemented in limma yields better predictions, whether a gene expression is truly differential or not. 
+
+### Running a standard limma pipeline
+
+Next, we will run a standard ‘limma’ differential expression (DE) analysis on a real microarray dataset. In particular, we will explore the combination of design matrices and contrast matrices to answer DE questions-of-interest
+
+If you need additional resources to understand this exercise or the methods behind it, it is strongly encourage to read both the http://www.statsci.org/smyth/pubs/ebayes.pdf and the https://www.bioconductor.org/packages/release/bioc/vignettes/limma/inst/doc/usersguide.pdf.
+
+```{r}
+
+library("affy")
+library("preprocessCore")
+unzip("affy_estrogen.zip")
+ddir <- "affy_estrogen"
+dir(ddir)
+```
+
+
+
+
+It is generally good practice to store the details of an experiment (e.g., the set of samples) in a machine-readable table, like the provided ``targets.txt’’ file; this is known as metadata. Have a look at this file in a text editor or a spreadsheet to see what kind of information is typically described. The following code reads in this metadata file, reads in the Affymetrix data and processes it with a method called RMA (robust multichip analysis).
+
+```{r}
+
+# preprocess affymetrix data
+targets <- readTargets("targets.txt", path=ddir)
+targets$time.h <- factor(targets$time.h)
+targets
+
+
+
+abatch <- ReadAffy(filenames=targets$filename,
+                   celfile.path=ddir)
+eset <- rma(abatch)  # bg correct, normalize, summarize
+
+```
+
+
+It is always good practice to look at overall summaries of a large dataset, such as a multidimensional scaling (MDS) plot to get an idea of the relations between samples. In this case, “distances on the plot approximate the typical log2 fold changes” (?plotMDS):
+
+
+```{r}
+
+mds <- plotMDS( exprs(eset), plot = FALSE)  # MDS plot
+qplot(x=mds$x, mds$y) + 
+  geom_point(aes(shape=targets$estrogen, 
+                 colour=targets$time.h), size=4)
+
+```
+
+In order to run the standard limma pipeline for differential expression, we need a design matrix and optionally, a contrast matrix. In the code below, the metadata is encoded into a factor variable that is used for creating the design matrix. It is suggested to look at and understand the design matrix before proceeding.
+
+```{r}
+# do the limma modeling
+f <- paste(targets$estrogen,targets$time.h,sep="")
+f <- factor(f)
+
+# create design matrix
+design <- model.matrix(~0+f)
+colnames(design) <- levels(f)
+design
+
+```
+
+
+
+At this stage, it may make sense to filter out control probesets or remove lowly expressed genes (and you will see this in other pipelines), but for simplicity, we go straight to the model fitting. From the design matrix, we can now fit the linear model (for each gene):
+
+```{r}
+fit <- lmFit(eset, design)
+```
+
+
+
+To make inferences about parameters defined in the design matrix, we can now define a contrast matrix, which can be constructed by hand or using the makeContrasts() function. Again, it is suggested to study this matrix and make sure you understand what it is doing (i.e., in terms of model parameters) before proceeding.
+
+
+```{r}
+cont.matrix <- makeContrasts(E10="present10-absent10",
+                             E48="present48-absent48",
+                             Time="absent48-absent10",levels=design)
+cont.matrix
+
+
+```
+
+
+Now, the contrasts can be fit and the moderation of the variance parameters (as discussed in lectures) can be performed:
+
+```{r}
+
+fit2  <- contrasts.fit(fit, cont.matrix)
+fit2  <- eBayes(fit2)
+class(fit2)
+
+
+names(fit2)
+```
+
+
+
+
+At this point, a lot of elements have now been added to the fit2 object and it would again be worth studying the details. See if you can understand what the different components are and if you need more details, type ?"MArrayLM-class" to see more information.
+
+Next, we wish to summarize the differential expression statistics, such as via moderated-t (or F) statistics and perhaps (adjusted) P-values. The topTable() function has many facilities for this:
+
+
+```{r}
+topTable(fit2, coef=1, n=5)
+
+topTable(fit2, coef=2, n=5)
+```
+
+
+
+Here, it is worth understanding exactly what coef=1 or coef=2 are testing before proceeding.
+
+It is also recommended to look at the data that goes into the statistical test in the first place.For example, a plot for one gene’s expression:
+
+```{r}
+
+qplot(x=f, y=exprs(eset)["39642_at",],) + 
+  geom_point(aes(shape=targets$estrogen, 
+                 colour=targets$time.h), size=4)
+```
+
+
+
+_Question 6. From the matrix of summarized Affymetrix data that went into the limma pipeline in the first place (exprs(eset)), manually calculate the logFC and AveExpr for one of the top differentially expressed features._
+
+We choose the feature *31798_at* for confirming the toptable from the limma pipeline. 
+
+```{r}
+matrix <- (exprs(eset))
+top_feature <- subset(matrix, rownames(matrix) %in% "31798_at")
+logFC_1 <- mean(top_feature[3:4])-mean(top_feature[1:2])
+logFC_2 <- mean(top_feature[7:8])-mean(top_feature[5:6])
+AveExpr <- mean(top_feature[1:8])
+print(logFC_1); print(logFC_2); print(AveExpr)
+
+```
+The manually calculated values correspond to the values in the topTable displayed above for the feature *31798_at*
+
+
